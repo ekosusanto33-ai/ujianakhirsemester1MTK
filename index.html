@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ujian Sumatif Akhir Semester 1 - Matematika Kelas VI</title>
+    <!-- Memuat Tailwind CSS untuk styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Konfigurasi Font Inter -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f3f0; /* Warna latar belakang lembut */
+        }
+        /* Custom scrollbar for a cleaner look */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #f6ad55;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f7f3f0;
+        }
+        .quiz-container {
+            max-width: 900px;
+        }
+        .option-label {
+            transition: all 0.2s;
+            cursor: pointer;
+            @apply flex items-center p-4 border-2 border-gray-200 rounded-xl mb-3 hover:bg-yellow-50 hover:border-yellow-400 text-gray-800;
+        }
+        .option-label.selected-mc, .option-label.selected-tf {
+            @apply bg-yellow-200 border-yellow-500 shadow-md;
+        }
+        .option-label.selected-multi {
+            @apply bg-green-200 border-green-600 shadow-md;
+        }
+        .progress-bar {
+            transition: width 0.3s ease-in-out;
+        }
+        .complex-option-button {
+            transition: all 0.2s;
+            @apply w-1/2 p-3 text-sm font-semibold rounded-lg mx-1;
+        }
+        .btn-correct {
+            @apply bg-green-500 text-white hover:bg-green-600;
+        }
+        .btn-incorrect {
+            @apply bg-red-500 text-white hover:bg-red-600;
+        }
+        /* Style untuk modal */
+        .modal {
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+    </style>
+    <!-- Import Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Tentukan variabel global dari Canvas
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let app, db, auth;
+        let globalUserId = null;
+
+        // Fungsi untuk inisialisasi Firebase dan autentikasi
+        async function initializeFirebase() {
+            if (!firebaseConfig) {
+                console.error("Firebase config tidak ditemukan.");
+                return;
+            }
+
+            try {
+                // Atur log level debug untuk melihat detail koneksi
+                setLogLevel('Debug');
+                
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                // Atur persistensi sesi agar tetap login
+                await setPersistence(auth, browserSessionPersistence);
+
+                // Autentikasi
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        globalUserId = user.uid;
+                        console.log("Pengguna terautentikasi:", globalUserId);
+                    } else {
+                        globalUserId = crypto.randomUUID();
+                        console.log("Pengguna tidak terautentikasi, menggunakan ID acak:", globalUserId);
+                    }
+                });
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+            } catch (error) {
+                console.error("Kesalahan inisialisasi atau autentikasi Firebase:", error);
+            }
+        }
+
+        initializeFirebase();
+
+        // Fungsi untuk menyimpan hasil ujian ke Firestore
+        window.saveQuizResult = async (resultData) => {
+            if (!db || !globalUserId) {
+                console.error("Firestore atau User ID belum siap.");
+                return;
+            }
+
+            // Path collection untuk data publik (hasil ujian dapat diakses oleh guru/admin)
+            // Path: /artifacts/{appId}/public/data/quiz_results
+            const collectionPath = `artifacts/${appId}/public/data/quiz_results`;
+
+            try {
+                // Menambahkan dokumen baru ke collection
+                const docRef = await addDoc(collection(db, collectionPath), {
+                    ...resultData,
+                    userId: globalUserId,
+                    appId: appId,
+                    timestamp: new Date()
+                });
+                console.log("Hasil ujian berhasil disimpan dengan ID: ", docRef.id);
+                
+                // Tampilkan pesan berhasil
+                document.getElementById('save-status').textContent = "Hasil ujian berhasil direkam!";
+                document.getElementById('save-status').classList.remove('hidden', 'text-red-500');
+                document.getElementById('save-status').classList.add('text-green-600');
+
+            } catch (e) {
+                console.error("Kesalahan saat menyimpan hasil ujian: ", e);
+                // Tampilkan pesan gagal
+                document.getElementById('save-status').textContent = "Gagal merekam hasil ujian. Coba lagi.";
+                document.getElementById('save-status').classList.remove('hidden', 'text-green-600');
+                document.getElementById('save-status').classList.add('text-red-500');
+            }
+        };
+
+        window.getUserId = () => globalUserId;
+
+    </script>
+</head>
+<body class="min-h-screen p-4 md:p-8 flex justify-center items-start">
+
+    <!-- Kontainer Utama Aplikasi -->
+    <div id="app-container" class="quiz-container w-full bg-white shadow-2xl rounded-3xl p-6 md:p-10 border-t-8 border-yellow-500">
+
+        <!-- Header Aplikasi -->
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-extrabold text-yellow-600">Ujian Sumatif Akhir Semester 1 🚀</h1>
+            <p class="text-gray-500 mt-2 text-lg">Matematika Kelas VI</p>
+        </header>
+
+        <!-- Tahap 1: Formulir Data Siswa -->
+        <div id="student-data-form">
+            <h2 class="text-2xl font-bold text-gray-700 mb-6 border-b pb-2">Isi Data Siswa</h2>
+            <form id="data-form" class="space-y-6">
+                <div>
+                    <label for="studentName" class="block text-sm font-medium text-gray-700">Nama Lengkap</label>
+                    <input type="text" id="studentName" class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:ring-yellow-500 focus:border-yellow-500" required>
+                </div>
+                <div>
+                    <label for="studentPresence" class="block text-sm font-medium text-gray-700">Nomor Presensi (Absen)</label>
+                    <input type="number" id="studentPresence" class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:ring-yellow-500 focus:border-yellow-500" required min="1">
+                </div>
+                <div>
+                    <label for="examDate" class="block text-sm font-medium text-gray-700">Tanggal Ujian</label>
+                    <input type="date" id="examDate" class="mt-1 block w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:ring-yellow-500 focus:border-yellow-500" required>
+                </div>
+                <button type="submit" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-xl shadow-lg text-lg font-medium text-white bg-yellow-500 hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition duration-150">
+                    Mulai Ujian!
+                </button>
+            </form>
+        </div>
+
+        <!-- Tahap 2: Ujian -->
+        <div id="quiz-section" class="hidden">
+            <div class="mb-6">
+                <div class="text-lg font-medium text-gray-700 mb-2">
+                    Soal <span id="current-question-number">1</span> dari <span id="total-questions">30</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div id="progress-bar" class="progress-bar bg-yellow-500 h-2.5 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="p-6 bg-blue-50 rounded-2xl shadow-inner mb-6">
+                <p id="question-text" class="text-xl font-semibold text-gray-800 mb-4">Teks Soal...</p>
+                <div id="question-image" class="mb-4"></div> <!-- Placeholder untuk gambar jika ada -->
+            </div>
+
+            <!-- Area Jawaban (Konten berubah berdasarkan tipe soal) -->
+            <div id="options-container" class="space-y-3">
+                <!-- Pilihan akan dimasukkan di sini oleh JavaScript -->
+            </div>
+
+            <!-- Navigasi -->
+            <div class="mt-8 flex justify-between">
+                <button id="prev-button" class="px-6 py-3 rounded-xl font-semibold text-gray-700 bg-gray-200 hover:bg-gray-300 transition duration-150 shadow-md hidden">
+                    &larr; Soal Sebelumnya
+                </button>
+                <button id="next-button" class="px-6 py-3 rounded-xl font-semibold text-white bg-yellow-500 hover:bg-yellow-600 transition duration-150 shadow-lg">
+                    Soal Berikutnya &rarr;
+                </button>
+                <button id="submit-button" class="px-6 py-3 rounded-xl font-semibold text-white bg-green-600 hover:bg-green-700 transition duration-150 shadow-lg hidden">
+                    Selesai Ujian
+                </button>
+            </div>
+            
+            <!-- Modal Konfirmasi Selesai -->
+            <div id="confirm-modal" class="modal fixed inset-0 z-50 flex items-center justify-center hidden">
+                <div class="bg-white rounded-xl shadow-2xl p-8 max-w-sm w-full transform transition-all">
+                    <h3 class="text-xl font-bold text-gray-800 mb-4">Konfirmasi Selesai</h3>
+                    <p class="text-gray-600 mb-6">Apakah Anda yakin ingin menyelesaikan ujian? Anda tidak dapat kembali dan mengubah jawaban setelah ini.</p>
+                    <div class="flex justify-end space-x-3">
+                        <button id="cancel-submit" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Batal</button>
+                        <button id="confirm-submit" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Ya, Selesai!</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Tahap 3: Hasil Ujian -->
+        <div id="results-section" class="hidden text-center">
+            <h2 class="text-3xl font-bold text-green-600 mb-4">🎉 Selamat, Ujian Selesai! 🎉</h2>
+            <div class="p-6 bg-green-50 rounded-2xl shadow-lg inline-block">
+                <p class="text-lg text-gray-700">Nama Siswa:</p>
+                <p id="result-name" class="text-2xl font-extrabold text-gray-800 mb-4"></p>
+                
+                <p class="text-lg text-gray-700">Skor Akhir:</p>
+                <p id="result-score" class="text-5xl font-extrabold text-yellow-600 mb-6">0 / 100</p>
+                
+                <p id="result-message" class="text-xl font-semibold text-gray-800 mb-6"></p>
+            </div>
+
+            <!-- Status Penyimpanan Firestore -->
+            <div class="mt-6">
+                <p class="text-sm text-gray-500 mb-2">Status Perekaman Data:</p>
+                <span id="save-status" class="px-4 py-2 rounded-full font-medium hidden"></span>
+            </div>
+
+            <p class="text-sm text-gray-400 mt-4">ID Pengguna untuk Perekaman Data: <span id="user-id-display"></span></p>
+
+        </div>
+
+    </div>
+
+    <script>
+        // --- Data Ujian (30 Soal) ---
+        const questions = [
+            // 10 Soal Pilihan Ganda (MC) - Poin 2.5
+            { id: 1, type: 'mc', text: 'Pecahan yang senilai dengan $\\frac{2}{5}$ adalah...', options: ['\\frac{4}{10}', '\\frac{3}{10}', '\\frac{2}{10}', '\\frac{5}{10}'], answer: '\\frac{4}{10}', score: 2.5, topic: 'Pecahan Senilai' },
+            { id: 2, type: 'mc', text: 'Bentuk desimal dari pecahan $\\frac{3}{4}$ adalah...', options: ['0.34', '0.75', '0.65', '0.43'], answer: '0.75', score: 2.5, topic: 'Mengubah Pecahan' },
+            { id: 3, type: 'mc', text: 'Hasil dari $\\frac{1}{2} + \\frac{1}{4}$ adalah...', options: ['\\frac{2}{6}', '\\frac{3}{4}', '1', '\\frac{1}{4}'], answer: '\\frac{3}{4}', score: 2.5, topic: 'Operasi Pecahan' },
+            { id: 4, type: 'mc', text: 'Hasil dari $1\\frac{1}{3} - \\frac{1}{6}$ adalah...', options: ['1\\frac{1}{6}', '1\\frac{1}{2}', '1\\frac{2}{3}', '\\frac{7}{6}'], answer: '1\\frac{1}{6}', score: 2.5, topic: 'Operasi Pecahan' },
+            { id: 5, type: 'mc', text: 'Perbandingan jumlah apel dan jeruk adalah 2 : 3. Jika apel ada 8 buah, maka jumlah jeruk adalah...', options: ['10 buah', '12 buah', '14 buah', '16 buah'], answer: '12 buah', score: 2.5, topic: 'Perbandingan' },
+            { id: 6, type: 'mc', text: 'Bentuk pecahan biasa dari $60\\%$ adalah...', options: ['\\frac{6}{10}', '\\frac{1}{60}', '\\frac{3}{5}', '\\frac{2}{3}'], answer: '\\frac{3}{5}', score: 2.5, topic: 'Mengubah Pecahan' },
+            { id: 7, type: 'mc', text: 'Skala sebuah peta adalah 1 : 100.000. Artinya 1 cm pada peta sama dengan... cm jarak sebenarnya.', options: ['100', '1.000', '10.000', '100.000'], answer: '100.000', score: 2.5, topic: 'Skala' },
+            { id: 8, type: 'mc', text: 'Hasil dari $\\frac{4}{5} \\times \\frac{10}{12}$ adalah...', options: ['\\frac{40}{60}', '\\frac{2}{3}', '\\frac{1}{2}', '\\frac{5}{6}'], answer: '\\frac{2}{3}', score: 2.5, topic: 'Operasi Pecahan' },
+            { id: 9, type: 'mc', text: 'Bentuk pecahan campuran dari $\\frac{13}{5}$ adalah...', options: ['2\\frac{3}{5}', '3\\frac{2}{5}', '1\\frac{3}{5}', '2\\frac{2}{5}'], answer: '2\\frac{3}{5}', score: 2.5, topic: 'Mengubah Pecahan' },
+            { id: 10, type: 'mc', text: 'Jika $A:B = 5:2$ dan nilai $A$ adalah 20, maka nilai $B$ adalah...', options: ['8', '10', '15', '40'], answer: '8', score: 2.5, topic: 'Perbandingan' },
+            
+            // 5 Soal Benar/Salah (TF) - Poin 2.5
+            { id: 11, type: 'tf', text: 'Pernyataan: Pecahan $\\frac{8}{12}$ disederhanakan menjadi $\\frac{2}{3}$.', options: ['Benar', 'Salah'], answer: 'Benar', score: 2.5, topic: 'Pecahan Senilai' },
+            { id: 12, type: 'tf', text: 'Pernyataan: Hasil dari $2\\frac{1}{2} + 1\\frac{1}{4}$ adalah $3\\frac{3}{4}$.', options: ['Benar', 'Salah'], answer: 'Benar', score: 2.5, topic: 'Operasi Pecahan' },
+            { id: 13, type: 'tf', text: 'Pernyataan: Skala 1 : 500 berarti 1 cm pada gambar mewakili 5 meter jarak sebenarnya.', options: ['Benar', 'Salah'], answer: 'Benar', score: 2.5, topic: 'Skala' },
+            { id: 14, type: 'tf', text: 'Pernyataan: Perbandingan $4:6$ senilai dengan $2:3$.', options: ['Benar', 'Salah'], answer: 'Benar', score: 2.5, topic: 'Perbandingan' },
+            { id: 15, type: 'tf', text: 'Pernyataan: $0.25$ sama dengan $25\\%$.', options: ['Benar', 'Salah'], answer: 'Benar', score: 2.5, topic: 'Mengubah Pecahan' },
+
+            // 3 Soal Pilihan Lebih dari Satu Jawaban (Multi) - Poin 5.83
+            { id: 16, type: 'multi', text: 'Pilih semua pecahan yang senilai dengan $\\frac{1}{4}$!', options: ['\\frac{2}{8}', '\\frac{3}{12}', '\\frac{4}{16}', '\\frac{5}{25}', '\\frac{6}{24}'], answer: ['\\frac{2}{8}', '\\frac{3}{12}', '\\frac{4}{16}', '\\frac{6}{24}'], score: 5.83, topic: 'Pecahan Senilai' },
+            { id: 17, type: 'multi', text: 'Pilih operasi hitung yang hasilnya adalah $\\frac{5}{6}$!', options: ['\\frac{1}{3} + \\frac{1}{2}', '1 - \\frac{1}{6}', '\\frac{5}{12} \\times 2', '\\frac{1}{3} + \\frac{2}{3}', '\\frac{1}{6} + \\frac{2}{3}'], answer: ['\\frac{1}{3} + \\frac{1}{2}', '1 - \\frac{1}{6}', '\\frac{1}{6} + \\frac{2}{3}'], score: 5.83, topic: 'Operasi Pecahan' },
+            { id: 18, type: 'multi', text: 'Pilih semua bentuk yang memiliki nilai yang sama dengan $0.8$!', options: ['\\frac{4}{5}', '80\\%', '0.08', '1 - 0.2', '\\frac{8}{100}'], answer: ['\\frac{4}{5}', '80\\%', '1 - 0.2'], score: 5.83, topic: 'Mengubah Pecahan' },
+            
+            // 12 Soal Pilihan Ganda Kompleks (Complex MC) - Poin 3.75
+            // Setiap soal PG Kompleks memiliki 4 pernyataan, siswa harus memilih Benar/Salah untuk setiap pernyataan.
+            // Poin 3.75 didapatkan jika SEMUA 4 jawaban benar. Jika salah 1 saja, skor 0.
+            { id: 19, type: 'complex', text: 'Perhatikan pernyataan tentang $\\frac{3}{8}$. Tentukan apakah setiap pernyataan Benar atau Salah!', 
+              statements: [
+                  { text: 'Bentuk desimalnya adalah $0.375$.', answer: 'Benar' },
+                  { text: 'Bentuk persennya adalah $37.5\\%$.', answer: 'Benar' },
+                  { text: 'Pecahan senilainya adalah $\\frac{6}{16}$.', answer: 'Benar' },
+                  { text: 'Jika dikalikan $\\frac{1}{2}$, hasilnya $\\frac{3}{16}$.', answer: 'Benar' }
+              ], score: 3.75, topic: 'Mengubah Pecahan' 
+            },
+            { id: 20, type: 'complex', text: 'Perhatikan perhitungan skala pada peta. Jarak dua kota di peta adalah 5 cm. Skala peta 1 : 400.000.',
+              statements: [
+                  { text: 'Jarak sebenarnya adalah 20 km.', answer: 'Benar' },
+                  { text: 'Jarak 1 cm pada peta mewakili 4 km.', answer: 'Benar' },
+                  { text: 'Jika skala diubah menjadi 1 : 200.000, jarak di peta menjadi 10 cm.', answer: 'Benar' },
+                  { text: 'Jarak sebenarnya dalam meter adalah 2.000.000 m.', answer: 'Salah' } // 20.000 m
+              ], score: 3.75, topic: 'Skala'
+            },
+            { id: 21, type: 'complex', text: 'Perhatikan operasi hitung pecahan berikut. Tentukan hasil operasi tersebut Benar atau Salah!',
+              statements: [
+                  { text: '$\\frac{1}{5} + \\frac{2}{3} = \\frac{13}{15}$', answer: 'Benar' },
+                  { text: '$\\frac{5}{6} - \\frac{1}{3} = \\frac{1}{2}$', answer: 'Benar' },
+                  { text: '$1\\frac{1}{4} \\times \\frac{2}{5} = \\frac{1}{2}$', answer: 'Benar' },
+                  { text: '$\\frac{9}{10} \\div \\frac{3}{5} = 1\\frac{1}{2}$', answer: 'Benar' }
+              ], score: 3.75, topic: 'Operasi Pecahan'
+            },
+            { id: 22, type: 'complex', text: 'Dua bilangan memiliki perbandingan $7:4$. Jumlah kedua bilangan adalah 33.',
+              statements: [
+                  { text: 'Bilangan pertama adalah 21.', answer: 'Benar' },
+                  { text: 'Bilangan kedua adalah 12.', answer: 'Benar' },
+                  { text: 'Selisih kedua bilangan adalah 9.', answer: 'Benar' },
+                  { text: 'Perbandingan jika kedua bilangan ditambah 1 menjadi $8:5$.', answer: 'Salah' } // 22:13 -> Bukan 8:5
+              ], score: 3.75, topic: 'Perbandingan'
+            },
+            { id: 23, type: 'complex', text: 'Pernyataan tentang pecahan $\\frac{18}{24}$.',
+              statements: [
+                  { text: 'Bentuk paling sederhana adalah $\\frac{3}{4}$.', answer: 'Benar' },
+                  { text: 'Senilai dengan $75\\%$.', answer: 'Benar' },
+                  { text: 'Senilai dengan $\\frac{9}{12}$.', answer: 'Benar' },
+                  { text: 'Bentuk desimalnya adalah $0.85$.', answer: 'Salah' } // 0.75
+              ], score: 3.75, topic: 'Pecahan Senilai'
+            },
+            { id: 24, type: 'complex', text: 'Perhatikan perhitungan operasi campuran pecahan: $\\frac{1}{2} + \\frac{1}{3} \\times \\frac{3}{4}$.',
+              statements: [
+                  { text: 'Operasi perkalian dilakukan terlebih dahulu.', answer: 'Benar' },
+                  { text: 'Hasil perkalian adalah $\\frac{1}{4}$.', answer: 'Benar' },
+                  { text: 'Hasil penjumlahan akhirnya adalah $\\frac{3}{4}$.', answer: 'Benar' },
+                  { text: 'Jika urutan diabaikan, hasilnya adalah $\\frac{5}{8}$.', answer: 'Salah' } // (1/2+1/3)*3/4 = 5/8. Soal jebakan.
+              ], score: 3.75, topic: 'Operasi Pecahan'
+            },
+            { id: 25, type: 'complex', text: 'Jarak kota A dan B di peta 8 cm. Jarak sebenarnya 120 km.',
+              statements: [
+                  { text: 'Skala peta adalah 1 : 1.500.000.', answer: 'Benar' },
+                  { text: 'Jika jarak di peta 10 cm, jarak sebenarnya 150 km.', answer: 'Benar' },
+                  { text: '1 cm pada peta mewakili 15.000 meter.', answer: 'Salah' } // 1500000cm = 15000m
+                  , { text: 'Perbandingan jarak di peta dan jarak sebenarnya adalah $1:1500000$.', answer: 'Benar' }
+              ], score: 3.75, topic: 'Skala'
+            },
+            { id: 26, type: 'complex', text: 'Umur Ayah dan Ibu berbanding $5:4$. Selisih umur mereka 6 tahun.',
+              statements: [
+                  { text: 'Umur Ayah adalah 30 tahun.', answer: 'Benar' },
+                  { text: 'Umur Ibu adalah 24 tahun.', answer: 'Benar' },
+                  { text: 'Jumlah umur mereka 54 tahun.', answer: 'Benar' },
+                  { text: 'Umur Ayah 5 tahun mendatang adalah 35 tahun.', answer: 'Benar' }
+              ], score: 3.75, topic: 'Perbandingan'
+            },
+            { id: 27, type: 'complex', text: 'Perhatikan operasi hitung: $\\frac{3}{4} \\div 0.25$.',
+              statements: [
+                  { text: 'Bentuk pecahan biasa dari $0.25$ adalah $\\frac{1}{4}$.', answer: 'Benar' },
+                  { text: 'Operasi tersebut sama dengan $\\frac{3}{4} \\times 4$.', answer: 'Benar' },
+                  { text: 'Hasil akhirnya adalah 3.', answer: 'Benar' },
+                  { text: 'Hasil akhirnya sama dengan $30\\%$.', answer: 'Salah' } // 3 = 300%
+              ], score: 3.75, topic: 'Operasi Pecahan'
+            },
+            { id: 28, type: 'complex', text: 'Pernyataan tentang pecahan $1\\frac{2}{3}$.',
+              statements: [
+                  { text: 'Bentuk pecahan biasa adalah $\\frac{5}{3}$.', answer: 'Benar' },
+                  { text: 'Jika dijumlahkan dengan $\\frac{1}{3}$, hasilnya 2.', answer: 'Benar' },
+                  { text: 'Jika dikurangi $\\frac{2}{3}$, hasilnya 1.', answer: 'Benar' },
+                  { text: 'Bentuk desimalnya adalah $1.63$.', answer: 'Salah' } // 1.666...
+              ], score: 3.75, topic: 'Mengubah Pecahan'
+            },
+            { id: 29, type: 'complex', text: 'Perhatikan perbandingan uang saku Ali, Budi, dan Cici adalah $2:3:5$. Total uang saku mereka Rp 50.000.',
+              statements: [
+                  { text: 'Uang saku Ali adalah Rp 10.000.', answer: 'Benar' },
+                  { text: 'Uang saku Budi adalah Rp 15.000.', answer: 'Benar' },
+                  { text: 'Uang saku Cici adalah Rp 25.000.', answer: 'Benar' },
+                  { text: 'Selisih uang saku Cici dan Ali adalah Rp 10.000.', answer: 'Salah' } // Rp 15.000
+              ], score: 3.75, topic: 'Perbandingan'
+            },
+            { id: 30, type: 'complex', text: 'Sebuah denah rumah berskala $1:200$. Panjang kamar di denah $3 \\text{ cm}$. Lebarnya $2 \\text{ cm}$.',
+              statements: [
+                  { text: 'Panjang kamar sebenarnya adalah $6 \\text{ meter}$.', answer: 'Benar' },
+                  { text: 'Lebar kamar sebenarnya adalah $4 \\text{ meter}$.', answer: 'Benar' },
+                  { text: 'Luas kamar sebenarnya adalah $24 \\text{ meter persegi}$.', answer: 'Benar' },
+                  { text: 'Jika skala diubah menjadi $1:100$, panjang kamar di denah menjadi $6 \\text{ cm}$.', answer: 'Benar' }
+              ], score: 3.75, topic: 'Skala'
+            }
+        ];
+
+        // --- Konfigurasi Ujian ---
+        let currentQuestionIndex = 0;
+        const totalQuestions = questions.length;
+        const studentAnswers = Array(totalQuestions).fill(null);
+        let studentInfo = {};
+
+        // --- Elemen DOM ---
+        const studentDataForm = document.getElementById('student-data-form');
+        const quizSection = document.getElementById('quiz-section');
+        const resultsSection = document.getElementById('results-section');
+        const dataForm = document.getElementById('data-form');
+        const questionText = document.getElementById('question-text');
+        const optionsContainer = document.getElementById('options-container');
+        const currentQuestionNumberSpan = document.getElementById('current-question-number');
+        const totalQuestionsSpan = document.getElementById('total-questions');
+        const progressBar = document.getElementById('progress-bar');
+        const prevButton = document.getElementById('prev-button');
+        const nextButton = document.getElementById('next-button');
+        const submitButton = document.getElementById('submit-button');
+        const confirmModal = document.getElementById('confirm-modal');
+        const cancelSubmitBtn = document.getElementById('cancel-submit');
+        const confirmSubmitBtn = document.getElementById('confirm-submit');
+        const userIdDisplay = document.getElementById('user-id-display');
+
+        // Memuat MathJax untuk render LaTeX
+        function loadMathJax() {
+            if (typeof MathJax === 'undefined') {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js';
+                script.id = 'MathJax-script';
+                script.async = true;
+                document.head.appendChild(script);
+            }
+        }
+        loadMathJax();
+
+        // Render ulang MathJax
+        function renderMath() {
+            if (typeof MathJax !== 'undefined') {
+                MathJax.typesetPromise();
+            }
+        }
+
+        // --- Logika Navigasi & Tampilan ---
+
+        // Fungsi untuk menampilkan soal
+        function displayQuestion() {
+            const question = questions[currentQuestionIndex];
+            const answer = studentAnswers[currentQuestionIndex];
+
+            // Update Header & Progress Bar
+            currentQuestionNumberSpan.textContent = currentQuestionIndex + 1;
+            const progress = ((currentQuestionIndex + 1) / totalQuestions) * 100;
+            progressBar.style.width = `${progress}%`;
+            questionText.innerHTML = question.text;
+            
+            optionsContainer.innerHTML = '';
+
+            // Tampilkan tombol navigasi yang sesuai
+            prevButton.classList.toggle('hidden', currentQuestionIndex === 0);
+            nextButton.classList.toggle('hidden', currentQuestionIndex === totalQuestions - 1);
+            submitButton.classList.toggle('hidden', currentQuestionIndex < totalQuestions - 1);
+
+            // Render opsi berdasarkan tipe soal
+            switch (question.type) {
+                case 'mc':
+                case 'tf':
+                    renderMultipleChoice(question, answer);
+                    break;
+                case 'multi':
+                    renderMultiSelect(question, answer);
+                    break;
+                case 'complex':
+                    renderComplexMC(question, answer);
+                    break;
+            }
+
+            // Render ulang MathJax setelah konten diubah
+            // Gunakan setTimeout untuk memastikan DOM diperbarui
+            setTimeout(renderMath, 10);
+        }
+
+        // Render untuk Pilihan Ganda (MC) dan Benar/Salah (TF)
+        function renderMultipleChoice(question, currentAnswer) {
+            question.options.forEach((option, index) => {
+                const isSelected = currentAnswer === option;
+                const label = document.createElement('label');
+                label.className = `option-label ${isSelected ? 'selected-mc' : ''}`;
+                label.innerHTML = `
+                    <input type="radio" name="option-${question.id}" value="${option}" class="hidden" ${isSelected ? 'checked' : ''}>
+                    <span class="w-5 h-5 border-2 ${isSelected ? 'bg-yellow-500 border-yellow-500' : 'border-gray-400'} rounded-full flex-shrink-0 mr-3 transition duration-150 flex items-center justify-center">
+                        <span class="w-2.5 h-2.5 rounded-full ${isSelected ? 'bg-white' : ''}"></span>
+                    </span>
+                    <span class="text-lg">${option}</span>
+                `;
+                label.onclick = () => handleAnswerChange(question.id, option);
+                optionsContainer.appendChild(label);
+            });
+        }
+
+        // Render untuk Pilihan Lebih dari Satu Jawaban (Multi)
+        function renderMultiSelect(question, currentAnswer = []) {
+            question.options.forEach((option, index) => {
+                const isSelected = currentAnswer.includes(option);
+                const label = document.createElement('label');
+                label.className = `option-label ${isSelected ? 'selected-multi' : ''}`;
+                label.innerHTML = `
+                    <input type="checkbox" name="option-${question.id}" value="${option}" class="hidden" ${isSelected ? 'checked' : ''}>
+                    <span class="w-5 h-5 border-2 ${isSelected ? 'bg-green-600 border-green-600' : 'border-gray-400'} rounded-md flex-shrink-0 mr-3 transition duration-150 flex items-center justify-center">
+                        <svg class="w-4 h-4 text-white ${isSelected ? '' : 'hidden'}" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+                    </span>
+                    <span class="text-lg">${option}</span>
+                `;
+                label.onclick = (e) => handleMultiAnswerChange(question.id, option, e);
+                optionsContainer.appendChild(label);
+            });
+        }
+
+        // Render untuk Pilihan Ganda Kompleks (Complex MC)
+        function renderComplexMC(question, currentAnswer = {}) {
+            const table = document.createElement('div');
+            table.className = 'w-full space-y-4';
+
+            question.statements.forEach((statement, index) => {
+                const statementKey = `stmt_${index}`;
+                const selected = currentAnswer[statementKey];
+
+                const statementDiv = document.createElement('div');
+                statementDiv.className = 'p-4 border border-gray-300 rounded-xl bg-white shadow-sm flex flex-col md:flex-row md:items-center justify-between';
+                statementDiv.innerHTML = `
+                    <span class="text-base font-medium text-gray-700 md:w-3/5 mb-3 md:mb-0">${statement.text}</span>
+                    <div class="flex space-x-2 md:w-2/5 justify-end">
+                        <button id="btn-benar-${question.id}-${index}" 
+                                class="complex-option-button ${selected === 'Benar' ? 'btn-correct' : 'bg-gray-100 text-gray-700 hover:bg-green-100'}"
+                                data-value="Benar">
+                            Benar
+                        </button>
+                        <button id="btn-salah-${question.id}-${index}" 
+                                class="complex-option-button ${selected === 'Salah' ? 'btn-incorrect' : 'bg-gray-100 text-gray-700 hover:bg-red-100'}"
+                                data-value="Salah">
+                            Salah
+                        </button>
+                    </div>
+                `;
+                table.appendChild(statementDiv);
+
+                // Tambahkan event listener untuk tombol Benar/Salah
+                statementDiv.querySelectorAll('button').forEach(button => {
+                    button.onclick = () => handleComplexAnswerChange(question.id, statementKey, button.dataset.value);
+                });
+            });
+
+            optionsContainer.appendChild(table);
+        }
+
+        // --- Logika Jawaban ---
+
+        // Handle untuk Pilihan Ganda dan Benar/Salah
+        function handleAnswerChange(questionId, selectedValue) {
+            const questionIndex = questions.findIndex(q => q.id === questionId);
+            if (questionIndex !== -1) {
+                // Perbarui jawaban
+                studentAnswers[questionIndex] = selectedValue;
+                // Update tampilan (hapus 'selected-mc' dari semua label, tambahkan ke yang baru)
+                optionsContainer.querySelectorAll('.option-label').forEach(label => {
+                    label.classList.remove('selected-mc');
+                    const radio = label.querySelector('input[type="radio"]');
+                    if (radio.value === selectedValue) {
+                        label.classList.add('selected-mc');
+                        label.querySelector('span:first-child').classList.remove('border-gray-400');
+                        label.querySelector('span:first-child').classList.add('bg-yellow-500', 'border-yellow-500');
+                        label.querySelector('span:last-child').classList.add('bg-white');
+                    } else {
+                        label.querySelector('span:first-child').classList.add('border-gray-400');
+                        label.querySelector('span:first-child').classList.remove('bg-yellow-500', 'border-yellow-500');
+                        label.querySelector('span:last-child').classList.remove('bg-white');
+                    }
+                });
+            }
+        }
+
+        // Handle untuk Pilihan Lebih dari Satu Jawaban
+        function handleMultiAnswerChange(questionId, selectedValue, event) {
+            event.preventDefault(); // Mencegah checkbox default action
+            const questionIndex = questions.findIndex(q => q.id === questionId);
+            if (questionIndex !== -1) {
+                let currentAnswer = studentAnswers[questionIndex] || [];
+                const isSelected = currentAnswer.includes(selectedValue);
+                
+                if (isSelected) {
+                    currentAnswer = currentAnswer.filter(val => val !== selectedValue);
+                } else {
+                    currentAnswer = [...currentAnswer, selectedValue];
+                }
+                
+                studentAnswers[questionIndex] = currentAnswer;
+                displayQuestion(); // Render ulang untuk update tampilan
+            }
+        }
+
+        // Handle untuk Pilihan Ganda Kompleks
+        function handleComplexAnswerChange(questionId, statementKey, selectedValue) {
+            const questionIndex = questions.findIndex(q => q.id === questionId);
+            if (questionIndex !== -1) {
+                // Pastikan studentAnswers[questionIndex] adalah objek
+                if (typeof studentAnswers[questionIndex] !== 'object' || studentAnswers[questionIndex] === null) {
+                    studentAnswers[questionIndex] = {};
+                }
+
+                // Perbarui jawaban untuk pernyataan spesifik
+                studentAnswers[questionIndex] = {
+                    ...studentAnswers[questionIndex],
+                    [statementKey]: selectedValue
+                };
+                
+                // Update tampilan tombol secara real-time
+                const btnBenar = document.getElementById(`btn-benar-${questionId}-${statementKey.split('_')[1]}`);
+                const btnSalah = document.getElementById(`btn-salah-${questionId}-${statementKey.split('_')[1]}`);
+
+                if (selectedValue === 'Benar') {
+                    btnBenar.classList.add('btn-correct');
+                    btnBenar.classList.remove('bg-gray-100', 'text-gray-700', 'hover:bg-green-100');
+                    btnSalah.classList.remove('btn-incorrect');
+                    btnSalah.classList.add('bg-gray-100', 'text-gray-700', 'hover:bg-red-100');
+                } else if (selectedValue === 'Salah') {
+                    btnSalah.classList.add('btn-incorrect');
+                    btnSalah.classList.remove('bg-gray-100', 'text-gray-700', 'hover:bg-red-100');
+                    btnBenar.classList.remove('btn-correct');
+                    btnBenar.classList.add('bg-gray-100', 'text-gray-700', 'hover:bg-green-100');
+                }
+            }
+        }
+
+
+        // --- Logika Pindah Soal ---
+
+        prevButton.onclick = () => {
+            if (currentQuestionIndex > 0) {
+                currentQuestionIndex--;
+                displayQuestion();
+            }
+        };
+
+        nextButton.onclick = () => {
+            if (currentQuestionIndex < totalQuestions - 1) {
+                currentQuestionIndex++;
+                displayQuestion();
+            }
+        };
+
+        submitButton.onclick = () => {
+            confirmModal.classList.remove('hidden');
+        };
+
+        cancelSubmitBtn.onclick = () => {
+            confirmModal.classList.add('hidden');
+        };
+
+        // --- Logika Penyelesaian Ujian ---
+
+        confirmSubmitBtn.onclick = () => {
+            confirmModal.classList.add('hidden');
+            calculateScore();
+        };
+
+        // Fungsi utama perhitungan skor
+        function calculateScore() {
+            let totalScore = 0;
+            const detailedResults = [];
+
+            questions.forEach((q, index) => {
+                const studentAnswer = studentAnswers[index];
+                let isCorrect = false;
+
+                switch (q.type) {
+                    case 'mc':
+                    case 'tf':
+                        isCorrect = studentAnswer === q.answer;
+                        break;
+                    case 'multi':
+                        // Multi-select: semua jawaban benar harus dipilih, dan tidak ada jawaban salah yang dipilih
+                        const correctAnswers = q.answer.sort();
+                        const selectedAnswers = (studentAnswer || []).sort();
+                        
+                        // Cek apakah jumlah jawaban yang dipilih sama dengan jumlah jawaban yang benar
+                        if (correctAnswers.length === selectedAnswers.length) {
+                            // Cek apakah setiap elemen di selectedAnswers ada di correctAnswers
+                            isCorrect = correctAnswers.every((val, i) => val === selectedAnswers[i]);
+                        }
+                        break;
+                    case 'complex':
+                        // Complex MC: hanya dapat skor jika SEMUA 4 pernyataan dijawab dengan benar
+                        isCorrect = q.statements.every((stmt, stmtIndex) => {
+                            const stmtKey = `stmt_${stmtIndex}`;
+                            return (studentAnswer && studentAnswer[stmtKey]) === stmt.answer;
+                        });
+                        break;
+                }
+
+                if (isCorrect) {
+                    totalScore += q.score;
+                }
+                
+                // Simpan hasil detail
+                detailedResults.push({
+                    questionId: q.id,
+                    type: q.type,
+                    topic: q.topic,
+                    correct: isCorrect,
+                    maxScore: q.score,
+                    achievedScore: isCorrect ? q.score : 0,
+                    studentAnswer: studentAnswer
+                });
+            });
+
+            const finalScore = Math.round(totalScore); // Pembulatan untuk skor akhir
+            displayResults(finalScore, detailedResults);
+        }
+
+        // Tampilkan hasil ujian
+        function displayResults(score, detailedResults) {
+            quizSection.classList.add('hidden');
+            resultsSection.classList.remove('hidden');
+
+            const resultName = document.getElementById('result-name');
+            const resultScore = document.getElementById('result-score');
+            const resultMessage = document.getElementById('result-message');
+
+            resultName.textContent = studentInfo.name;
+            resultScore.textContent = `${score} / 100`;
+            
+            let message = "Kerja bagus! Selalu semangat belajar matematika!";
+            if (score === 100) {
+                message = "Sempurna! Anda adalah Juara Matematika! 🥇";
+            } else if (score >= 80) {
+                message = "Hebat! Anda sangat menguasai materi ini! 🌟";
+            } else if (score >= 60) {
+                message = "Baik! Tingkatkan lagi belajarmu di beberapa materi. 👍";
+            } else {
+                message = "Terus semangat! Jangan pernah menyerah dalam belajar! 💪";
+            }
+            resultMessage.textContent = message;
+
+            // Panggil fungsi penyimpanan data
+            const quizResultData = {
+                ...studentInfo,
+                score: score,
+                totalQuestions: totalQuestions,
+                detailedResults: detailedResults,
+                // Tambahkan ID pengguna dari Firebase (disediakan di window)
+                // ID pengguna akan ditambahkan oleh fungsi saveQuizResult
+            };
+            
+            // Tampilkan User ID di UI (untuk debugging/referensi guru)
+            userIdDisplay.textContent = window.getUserId() || 'Belum terautentikasi';
+            
+            // Simpan hasil ke Firestore
+            window.saveQuizResult(quizResultData);
+        }
+
+        // --- Logika Formulir Data Siswa ---
+
+        dataForm.onsubmit = (e) => {
+            e.preventDefault();
+            
+            // Simpan data siswa
+            studentInfo = {
+                name: document.getElementById('studentName').value,
+                presence: document.getElementById('studentPresence').value,
+                date: document.getElementById('examDate').value
+            };
+
+            // Pindah ke bagian ujian
+            studentDataForm.classList.add('hidden');
+            quizSection.classList.remove('hidden');
+
+            // Set total pertanyaan
+            totalQuestionsSpan.textContent = totalQuestions;
+
+            // Mulai ujian
+            displayQuestion();
+        };
+
+        // Atur tanggal ujian default ke hari ini
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('examDate').value = today;
+        });
+
+    </script>
+</body>
+</html>
