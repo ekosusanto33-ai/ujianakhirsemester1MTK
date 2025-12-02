@@ -6,7 +6,7 @@
     <title>Ujian Matematika Interaktif Pecahan dan Rasio (Kelas 6)</title>
     <!-- Memuat Tailwind CSS untuk styling modern dan responsif -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Script MathJax dihapus karena notasi matematika diubah menjadi teks sederhana -->
+    
     <style>
         /* Mengatur font agar notasi matematika dan teks biasa terlihat bagus */
         body {
@@ -168,6 +168,7 @@
         <p class="text-sm text-gray-500 mb-4">
             ID Sesi Pengguna: <span id="result-user-id" class="font-mono text-xs break-all text-gray-800"></span>
         </p>
+        <!-- NILAI AKHIR MUNCUL DI SINI -->
         <p class="text-5xl font-extrabold text-green-600">Nilai Anda: <span id="final-score"></span>/100</p>
         <p id="submission-status" class="mt-4 text-sm text-gray-500"></p>
     </div>
@@ -222,13 +223,16 @@
         window.submitQuiz = submitQuiz;
         window.db = db;
         window.auth = auth;
+        window.serverTimestamp = serverTimestamp; // Mengekspos serverTimestamp untuk digunakan di submitQuiz
+        window.addDoc = addDoc;
+        window.collection = collection;
     </script>
 
     <!-- Logika Aplikasi Ujian (JavaScript) -->
     <script>
         // Array yang berisi semua soal ujian
         // Total 30 Soal (15 PG @ 2pt = 30; 5 BS @ 4pt = 20; 10 PG Kompleks @ 5pt = 50. Total = 100)
-        // NOTASI MATEMATIKA TELAH DIUBAH KE FORMAT TEKS/GARIS MIRING (Contoh: 2/3) UNTUK KEJELASAN KODE MENTAH.
+        // Notasi matematika menggunakan format teks/garis miring (Contoh: 2/3) untuk kejelasan kode mentah.
         const questions = [
             // 15 Soal Pilihan Ganda (Nilai 2 per soal)
             {
@@ -528,8 +532,6 @@
                 `;
                 quizList.innerHTML += questionCard;
             });
-
-            // MathJax tidak diperlukan lagi karena menggunakan notasi teks sederhana
         }
 
         /**
@@ -617,7 +619,9 @@
             const currentUserId = window.auth.currentUser?.uid || 'Anonim';
             document.getElementById('result-user-id').textContent = currentUserId;
 
+            // BAGIAN INI MEMUNCULKAN NILAI
             document.getElementById('final-score').textContent = finalScore;
+            
             document.getElementById('submission-status').textContent = 'Mengirim hasil ujian ke database...';
 
             // Data untuk disimpan
@@ -650,10 +654,6 @@
                 document.getElementById('submission-status').textContent = "⚠️ Gagal menyimpan hasil ujian ke database. Mohon catat nilai Anda dan ID Sesi.";
             }
         }
-
-        // Ekspos fungsi Firestore yang dibutuhkan ke window agar dapat digunakan di script biasa
-        // Ini adalah workaround karena `script type="module"` tidak mengekspos impor secara otomatis
-        
     </script>
 
 </body>
